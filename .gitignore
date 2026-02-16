@@ -1,0 +1,31 @@
+# data and secrets
+data/
+*.csv
+*.tsv
+*.parquet
+*.jsonl
+*.zip
+*.7z
+
+# python junk
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# notebooks
+.ipynb_checkpoints/
+
+# outputs
+results/
+*.pt
+*.pth
+*.pkl
+*.joblib
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
