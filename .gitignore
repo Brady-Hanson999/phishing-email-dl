@@ -18,7 +18,6 @@ venv/
 .ipynb_checkpoints/
 
 # outputs
-results/
 *.pt
 *.pth
 *.pkl
