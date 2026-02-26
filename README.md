@@ -2,6 +2,12 @@
 
 Binary classifier for phishing vs. legitimate emails.
 
+**Author:** Brady Hanson  
+**University:** Penn State University  
+**Major:** Computer Science & AI Engineering  
+**Year:** 2026  
+
+
 ## Setup
 
 ```bash
@@ -131,3 +137,4 @@ python -m src.eval_mlp --threshold 0.4
 | `mlp_metrics.json` | Test accuracy, precision, recall, F1, ROC-AUC |
 | `figures/mlp_confusion_matrix.png` | Test confusion matrix |
 | `mlp_examples.csv` | 10 sample predictions with snippet, labels, prob |
+
