@@ -1,30 +1,11 @@
-# data and secrets
-data/
-*.csv
-*.tsv
-*.parquet
-*.jsonl
-*.zip
-*.7z
+﻿# Virtual environment (venv lives directly in MIDTERM/)
+MIDTERM/Lib/
+MIDTERM/Include/
+MIDTERM/Scripts/
+MIDTERM/share/
+MIDTERM/pyvenv.cfg
+MIDTERM/MIDTERM_FILES/
 
-# python junk
+# Python cache
 __pycache__/
 *.pyc
-.venv/
-venv/
-.env
-
-# notebooks
-.ipynb_checkpoints/
-
-# outputs
-*.pt
-*.pth
-*.pkl
-*.joblib
-
-# OS/editor
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
