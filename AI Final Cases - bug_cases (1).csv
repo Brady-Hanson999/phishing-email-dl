@@ -1,0 +1,92 @@
+ID,Name,LLM,Original Code,New Code with Bugs,Initial Self-Reflection,GenAI,GenAI's Guidance,New Self-Reflection
+1,Brady Hanson,Claude,"unique_labels = sorted(raw_labels.unique(), key=str)
+label_map = {v: i for i, v in enumerate(unique_labels)}
+labels: np.ndarray = raw_labels.map(label_map).values.astype(int)","unique_labels = sorted(raw_labels.unique(), key=str)
+label_map = {v: i for i, v in enumerate(unique_labels)}
+labels: np.ndarray = raw_labels.map(label_map).values.astype(int)
+labels = 1 - labels  # INTENTIONAL BUG","Flipping the 1 - labels switched which class was 0 and which was 1. This made the model mess up and predict the wrong class, thus the confusion matrix is wrong.",Bad,"The model didn't get ""confused"" — that's an important distinction. It trained correctly and converged, but on inverted labels. It learned a valid mapping from features to the flipped classes. Also, the confusion matrix being ""in the wrong place"" has a more precise meaning: the values along the diagonal (true positives and true negatives) are swapped with the off-diagonal values (false positives and false negatives). This directly inverts precision and recall, because those metrics are defined relative to whichever class is designated as ""positive."" If phishing is the positive class but is now labeled 0, the model is optimizing for the wrong thing entirely.","Using 1 - labels flips all the binary labels, so phishing and legitimate emails get swapped. At first, it seems like the model is mistaken, but it instead learns correctly… on the wrong/flipped data. The confusion matrix gets flipped, where true positives and true negatives swap with the false positives and false negatives. This changes precision and recall, so the model ends up optimizing for the wrong classification goal."
+2,Brady Hanson,Claude,"nn.Sequential(
+    nn.Linear(input_dim, hidden1),
+    nn.ReLU(inplace=True),
+    nn.Dropout(dropout),
+    nn.Linear(hidden1, hidden2),
+    nn.ReLU(inplace=True),
+    nn.Dropout(dropout),
+    nn.Linear(hidden2, 1),
+)","nn.Sequential(
+    nn.Linear(input_dim, hidden1),
+    nn.ReLU(inplace=True),
+    nn.Dropout(dropout),
+    nn.Linear(hidden1, hidden2),
+    nn.ReLU(inplace=True),
+    nn.Dropout(dropout),
+    nn.Linear(hidden2, 2),  # INTENTIONAL BUG
+)","Changing the output layer to have 2 neurons instead of 1 makes the model output two values, which doesn’t match what the loss function expects, therefore raising an error.",Bad,"You've correctly identified the shape mismatch and the two valid fixes, but switching to nn.CrossEntropyLoss isn't a drop-in replacement. It also requires the target labels to be integer class indices — which they already are here — but it's worth noting explicitly. More importantly, CrossEntropyLoss with 2 output classes is mathematically equivalent to BCEWithLogitsLoss with 1 output, so for binary classification, reverting to a single output neuron is the simpler and more conventional choice.","Changing the output to Linear(hidden2, 2) makes the model output shape [batch_size, 2], which doesn’t match what BCEWithLogitsLoss expects. The simplest fix is switching back to one output neuron, so the shape aligns. It is possible to use CrossEntropyLoss with two outputs, it’s basically equivalent mathematically, so using a single output is just cleaner and the more simple/standard approach."
+3,Brady Hanson,Claude,"for X_batch, y_batch in train_loader:
+    X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+    optimizer.zero_grad()
+    logits = model(X_batch)
+    loss = criterion(logits, y_batch)
+    loss.backward()
+    optimizer.step()","for X_batch, y_batch in train_loader:
+    X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+    # optimizer.zero_grad()  # INTENTIONAL BUG
+    logits = model(X_batch)
+    loss = criterion(logits, y_batch)
+    loss.backward()
+    optimizer.step()","Not using optimizer.zero_grad() means the gradients keep adding up every time, making them too big and causes the model to break",Bad,"You correctly identified gradient accumulation as the problem, but describing it purely as ""bigger gradients"" undersells the issue. The accumulated gradient isn't just scaled up — it's also directionally corrupted. Gradients from different batches point in different directions, so their sum doesn't represent a valid descent direction for any single batch. The effective update becomes an incoherent mixture of past and current information, which is why the behavior is so erratic rather than just slow or slightly overfit.","Without optimizer.zero_grad(), gradients accumulate across batches and don’t reset. This makes them larger, and mixes gradients from different batches that point in different directions. This misleads descent direction, leading to unproper training, where the model takes inconsistent steps and can diverge or produce NaN values."
+4,Brady Hanson,Claude,"_URL_RE = re.compile(
+    r""https?://\S+|www\.\S+"",
+    re.IGNORECASE,
+)","_URL_RE = re.compile(
+    r"".*"",  # INTENTIONAL BUG
+    re.IGNORECASE,
+)","Using .* in the regex matches everything, so all the text gets replaced and every email ends up looking the same, which makes the model useless.",Bad,"Some refinement: the model won't produce perfectly random predictions even with a constant feature matrix. A constant input means all variation in the output comes from the bias term alone. The model will likely converge to always predicting the majority class — so performance is determined entirely by class distribution, not by any learned features. That's subtly different from ""random,"" and would be visible as near-zero variance in predictions across the test set.","The regex .* matches the entire input, so every email gets replaced with the same <URL> token. This makes all documents identical, producing the same feature vector for every sample. With no variation in features, the model can’t learn weights and instead relies only on its bias term, which makes it predict majority class rather than making random predictions."
+5,Joe Breen,ChatGPT,"train_texts, hold_texts, train_labels, hold_labels = train_test_split(
+    texts, labels,
+    test_size=holdout_frac,
+    random_state=seed,
+    stratify=labels,
+)","train_texts, hold_texts, train_labels, hold_labels = train_test_split(
+    texts, labels,
+    test_size=0.0,  # INTENTIONAL BUG
+    random_state=seed,
+)",I think the crash is happening because setting the test size to 0 makes the training data too big and that messes up the model when it tries to evaluate.,Bad,You noticed there's no validation data. Trace the execution flow forward. Where does `hold_texts` go next? How does the subsequent `train_test_split` (for val and test sets) handle an empty input list? What happens when you try to calculate metrics like accuracy on an empty array?,"When you set test_size=0, you’re basically putting all the data into training and leaving nothing for testing. So hold_texts ends up empty, and later when the code tries to evaluate the model on test data, it crashes because there’s no data to run predictions on."
+6,Joe Breen,ChatGPT,"self.net = nn.Sequential(
+    nn.Linear(input_dim, hidden1),
+    nn.ReLU(inplace=True),
+    nn.Dropout(dropout),
+    nn.Linear(hidden1, hidden2),
+    nn.ReLU(inplace=True),
+    nn.Dropout(dropout),
+    nn.Linear(hidden2, 1),
+)","self.net = nn.Sequential(
+    nn.Linear(input_dim, hidden1),
+    nn.Dropout(dropout),
+    nn.Linear(hidden1, hidden2),
+    nn.Dropout(dropout),
+    nn.Linear(hidden2, 1),
+)",I took out the ReLU layers and the performance dropped a lot. I think the model just needs ReLU to work properly.,Bad,"Why does removing ReLU cause a performance drop? Mathematically, what happens when you stack multiple linear layers (`nn.Linear`) without any non-linear activation functions between them? Can this deep network learn anything more complex than a single linear layer?","If you remove the ReLU layers, the network basically turns into one big linear function. That means it can only learn really simple relationships, so it loses the ability to pick up more complex patterns and the performance drops a lot."
+7,Joe Breen,ChatGPT,criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight),criterion = nn.CrossEntropyLoss()  # INTENTIONAL BUG,I changed the loss to CrossEntropyLoss and it crashed with a shape mismatch. It seems like the input and target sizes don’t match anymore.,Bad,"Review the documentation for `nn.CrossEntropyLoss`. What shape does it expect for the input logits, and what shape/data type does it expect for the target labels? Compare that to `BCEWithLogitsLoss`, which expects binary floating-point targets matching the shape of the single-logit output.","CrossEntropyLoss expects the outputs and labels to be in a specific format for multi-class problems. But here the model is only outputting one value per sample, and the labels don’t match what it expects, so it crashes. For this kind of setup, BCEWithLogitsLoss works better."
+8,Allegra Francis,ChatGPT,"train_texts, hold_texts, train_labels, hold_labels = train_test_split(...)
+# ... later ...
+train_labels = train_labels.tolist()","train_texts, hold_texts, train_labels, hold_labels = train_test_split(...)
+# ... later ...
+np.random.shuffle(train_labels)  # INTENTIONAL BUG
+train_labels = train_labels.tolist()",I switched up the labels the model trained off of so it couldn't learn anything anymore. The validation score remains around 0.5. soooo the model is broken :(.,Bad,"If you shuffle the `train_labels` array but leave the `train_texts` list in its original order, what happens to the relationship between an email text and its label? Can the model extract meaningful patterns if the labels assigned to the features are essentially random noise?","Mixing up the `train_labels` breaks relationship between the inputs (the email texts) and their targets, the ground truth. The model is now trying to learn from a mapping where the wrong words, like 'spam' words are mapped as 'credible' words or vice versa at a random rate for every single sample because the relationship between the mapping is inaccurate. There isn't a consistent linking of the TF-IDF features to the different labels so, the model can't learn anything predictive from the data and it performs no better than just randomly guessing if words are legit or reliable. "
+9,Allegra Francis,ChatGPT,"def __init__(
+    self,
+    input_dim: int,
+    hidden1: int = 256,
+    hidden2: int = 128,
+    dropout: float = 0.3,
+) -> None:","def __init__(
+    self,
+    input_dim: int,
+    hidden1: int = 256,
+    hidden2: int = 128,
+    dropout: float = 1.0,  # INTENTIONAL BUG
+) -> None:",I switched the dropout to 1.0 so now the model always predicts the same class. It isn't updating properly anymore!!!!!!!.,Bad,"What does a dropout rate of 1.0 mean? If a dropout layer zeros out elements with probability *p*, and *p* is 1.0, what is the output of that layer? What happens to the gradients flowing backward through a layer where all outputs are zero?","In my program, when the dropout rate is set to 1.0, all the activations get zeroed out during the forward pass. This means the intermediate outputs become completely zero, and as a result, the final output is always zero. During backpropagation, since there are no activations left, the gradients can't flow, so the model weights never get updated. This causes the model to get stuck, just predicting the majority class based on the bias term or initial weights."
+10,Allegra Francis,ChatGPT,"test_probs = np.array(all_probs)
+test_preds = (test_probs >= args.threshold).astype(int)","test_probs = np.array(all_probs)
+test_preds = (test_probs < args.threshold).astype(int)  # INTENTIONAL BUG",Changed the evaluation logic to less-than instead of greater than so now the predictions are backwards.,Bad,"You noticed the predictions are backward. Why? If `test_probs` represents the probability that an email is phishing (class 1), what does it mean when that probability is very low (e.g., 0.1)? By changing `>= threshold` to `< threshold`, which emails are you now classifying as class 1?","The model outputs test_probs as the probability of an email being phishing (class 1). Typically, if the probability is high (>= 0.5), the email is classified as phishing. However, by changing the logic to < args.threshold, we are now assigning class 1 to emails with a low probability of being phishing—meaning we're classifying the most legitimate-looking emails as phishing. This effectively inverts the decision boundary and completely swaps the final predicted classes during evaluation."
